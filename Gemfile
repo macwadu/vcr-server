@@ -1,0 +1,10 @@
+source "http://rubygems.org"
+
+gem "sinatra"
+gem "haml"
+gem "vcr"
+gem "webmock"
+gem "pry"
+gem "pry-remote"
+gem "shotgun"
+gem "faraday"
