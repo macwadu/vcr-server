@@ -3,35 +3,35 @@ require 'vcr'
 require 'cgi'
 require 'pry'
 require 'pry-remote'
-require "json"
+require 'json'
 require 'faraday'
-require "logger"
-require 'faraday_middleware'
-
+require 'logger'
 
 class App < Sinatra::Base
+  enable :logging, :dump_errors, :raise_error
 
-  set :show_exceptions, false
+  before do
+    content_type 'application/json'
+  end
 
   logger = Logger.new $stderr
   logger.level = Logger::DEBUG
 
   configure do
     VCR.configure do |c|
-      c.cassette_library_dir = "spec/fixtures"
+      c.cassette_library_dir = 'spec/fixtures'
       c.allow_http_connections_when_no_cassette = true
-      c.default_cassette_options = { :record => :none, :allow_playback_repeats => true }
+      c.default_cassette_options = { record: :none, allow_playback_repeats: true }
       c.hook_into :webmock
     end
   end
 
   helpers do
-
     # From https://github.com/unixcharles/vcr-remote-controller
 
     def cassettes
-      Dir["#{VCR::configuration.cassette_library_dir}/**/*.yml"].map do |f|
-        f.match(/^#{Regexp.escape(VCR::configuration.cassette_library_dir.to_s)}\/(.+)\.yml/)[1]
+      Dir["#{VCR.configuration.cassette_library_dir}/**/*.yml"].map do |f|
+        f.match(/^#{Regexp.escape(VCR.configuration.cassette_library_dir.to_s)}\/(.+)\.yml/)[1]
       end
     end
 
@@ -56,9 +56,8 @@ class App < Sinatra::Base
     end
 
     def default_record_mode
-      VCR::configuration.default_cassette_options[:record]
+      VCR.configuration.default_cassette_options[:record]
     end
-
   end
 
   get '/?' do
@@ -75,78 +74,71 @@ class App < Sinatra::Base
   end
 
   mock_handler '/*' do
-
-    @platform = "https://enpoint.com"
-		@http_request_method = request.request_method	# GET, POST, DELETE, PATCH
-		@request_path = request.path_info		# /documents/1232323232
-
+    @endpoint = 'https://endpoint.com'
+    @http_request_method = request.request_method	# GET, POST, DELETE, PATCH
+    @request_path = request.path_info	# /documents/1232323232
+    request_parameters = {}
     request_headers =
     {
-      'Accept' 				=> request.env['HTTP_ACCEPT'],
-      'Accept-Encoding'		=> request.env['HTTP_ACCEPT_ENCODING'],
-      'Content-Disposition' 	=> request.env['HTTP_CONTENT_DISPOSITION'],
-      'If-Unmodified-Since'   => request.env['HTTP_IF_UNMODIFIED_SINCE'],
-      'Link' 					=> request.env['HTTP_LINK'],
-      'Authorization' 		=> request.env['HTTP_AUTHORIZATION'],
+      'Accept'	=> request.env['HTTP_ACCEPT'],
+      'Accept-Encoding'	=> request.env['HTTP_ACCEPT_ENCODING'],
+      'Content-Disposition'	=> request.env['HTTP_CONTENT_DISPOSITION'],
+      'If-Unmodified-Since' => request.env['HTTP_IF_UNMODIFIED_SINCE'],
+      'Link'	=> request.env['HTTP_LINK'],
+      'Authorization'	=> request.env['HTTP_AUTHORIZATION'],
       'User-Agent' 			=> request.env['HTTP_USER_AGENT'],
-      'Content-Length'		=> request.env['CONTENT_LENGTH'],
+      'Content-Length'	=> request.env['CONTENT_LENGTH'],
       'Content-Type'			=> request.env['CONTENT_TYPE']
     }
 
-  request_query_hash = request.env['rack.request.query_hash']
+    request_query_hash = request.env['rack.request.query_hash']
 
-  if request.get? || request.delete?
-    request_parameters = request.env['rack.request.query_hash']
-  elsif request.post? || request.patch? || request.put?
-	  request_parameters = request.env['rack.request.form_hash']
-		if request_parameters.nil?
-			request.body.rewind
-			request_parameters = request.body.read
-		end
-	end
-	request_headers.delete_if { |k, v| v.nil? || v.empty? }
+    if request.get? || request.delete?
+      request_parameters = request.env['rack.request.query_hash']
+    elsif request.post? || request.patch? || request.put?
+      request_parameters = request.env['rack.request.form_hash']
+      if request_parameters.nil?
+        request.body.rewind
+        request_parameters = request.body.read
+      end
+    end
+    request_headers.delete_if { |_k, v| v.nil? || v.empty? }
 
-    # Update request with the platform access_token
-  # if !@request_headers['Authorization'].nil?
-  #   @request_headers['Authorization'] = "Bearer #{access_token}"
-  # if @request_parameters['access_token'].nil?
-  #    @request_parameters['access_token'] = access_token
-  # end
+    logger.debug "endpoint : #{@endpoint}"
+    logger.debug "request_method : #{@http_request_method}"
+    logger.debug "request_headers : #{request_headers}"
+    logger.debug "request_parameters : #{request_parameters}"
 
-    logger.debug "request_headers : #{@request_headers}"
-    p "---"*20
-    p request.env["rack.request.form_hash"]
-    p request.env["rack.request.query_hash"]
-    p request.env["rack.request.query_string"]
-    p request.env["rack.request.form_vars"]
-    p "---"*20
-    logger.debug "request_parameters : #{@request_parameters}"
-   VCR.use_cassette(request_hash, :record => :new_episodes) do
-
-    response = case @http_request_method
-               when "GET"
-                  connection.get @request_path, request_parameters, request_headers
-               when "PUT"
-                  #  @response = Unirest.put(endpoint, headers: @request_headers, parameters: @request_parameters )
-               when "POST"
-                 connection.post do |req|
-                   req.url @request_path
-                   req.headers = request_headers
-                   req.body = request_parameters
-                 end
-                  #  @response = Unirest.post(endpoint, headers:@request_headers, parameters:@request_parameters)
-               when "DELETE"
-                  #  @response = Unirest.delete(endpoint, headers:@request_headers, parameters:@request_parameters)
-               when "PATCH"
-                  #  @response = Unirest.patch(endpoint, headers:@request_headers, parameters:@request_parameters)
-               else
-                 raise "Unknown http request #{http_request_method}"
-            	end
-    logger.debug response
-    status response.status
-    body response.body
+    VCR.use_cassette(request_hash, record: :new_episodes) do
+      logger.info "="*40 + " Real Request begin - [#{@http_request_method}] [#{@request_path}] " + "="*40
+      response = case @http_request_method
+                 when 'GET'
+                   connection.get(@request_path, request_parameters, request_headers)
+                 when 'PUT'
+                   connection.put do |req|
+                     req.url @request_path
+                     req.headers = request_headers
+                     req.body = request_parameters
+                   end
+                 when 'POST'
+                   connection.post do |req|
+                     req.url @request_path
+                     req.headers = request_headers
+                     req.body = request_parameters
+                   end
+                 when 'DELETE'
+                   connection.delete(@request_path, request_parameters, request_headers)
+                 when 'PATCH'
+                   connection.patch(@request_path, request_parameters, request_headers)
+                 else
+                   fail "Unknown http request #{http_request_method}"
+                end
+      # logger.debug response
+      logger.info "="*40 + " Real Request stop - [#{@http_request_method}] [#{@request_path}] " + "="*40
+      status response.status
+      body response.body
+    end
   end
-end
 
   def request_hash
     sha256 = Digest::SHA256.new
@@ -157,10 +149,10 @@ end
   end
 
   def connection
-    connection ||= Faraday.new(:url => @platform ) do |c|
-      c.request  :url_encoded
-      c.response :logger
-      c.adapter  Faraday.default_adapter
+    connection ||= Faraday.new(url: @endpoint) do |c|
+      c.request :url_encoded
+      c.response :logger, ::Logger.new(STDOUT), bodies: true
+      c.adapter Faraday.default_adapter
     end
   end
 end
