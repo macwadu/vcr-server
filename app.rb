@@ -81,7 +81,7 @@ class App < Sinatra::Base
     request_headers =
     {
       'Accept'	=> request.env['HTTP_ACCEPT'],
-      'Accept-Encoding'	=> request.env['HTTP_ACCEPT_ENCODING'],
+      #'Accept-Encoding'	=> request.env['HTTP_ACCEPT_ENCODING'],
       'Content-Disposition'	=> request.env['HTTP_CONTENT_DISPOSITION'],
       'If-Unmodified-Since' => request.env['HTTP_IF_UNMODIFIED_SINCE'],
       'Link'	=> request.env['HTTP_LINK'],
