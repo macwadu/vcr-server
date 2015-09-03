@@ -1,10 +1,13 @@
 vcr-server
-----------
+===
 
 VCR web server
 
--	Recording POST request
--	GET request WIP
+WIP:
+-	 Deal with type of recording
+-	 Cassettes names
+-	 Configuration
+-	 And more ...
 
 Usage
 =====
